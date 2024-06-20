@@ -1,24 +1,34 @@
 {
+  "name": "root",
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "watch": "turbo run watch",
     "dev": "turbo run dev",
+    "test": "turbo run test",
     "lint": "turbo run lint",
     "clean": "turbo run clean && rm -rf node_modules",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build --filter=docs^... && changeset publish"
+    "release": "turbo run build && changeset publish",
+    "fix": "turbo lint && npm run format",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx}\""
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
     "prettier": "^3.2.5",
-    "turbo": "^2.0.4"
+    "turbo": "^2.0.4",
+    "vitest": "^0.34.6"
   },
-  "name": "design-system",
   "packageManager": "npm@10.8.1",
   "workspaces": [
-    "apps/*",
+    "examples/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@changesets/cli": "^2.27.1",
+    "prettier": "^3.2.5",
+    "zod": "^3.23.8"
+  }
 }

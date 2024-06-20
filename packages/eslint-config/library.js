@@ -12,10 +12,7 @@ const project = resolve(process.cwd(), "tsconfig.json");
  */
 
 module.exports = {
-  extends: [
-    "@vercel/style-guide/eslint/node",
-    "@vercel/style-guide/eslint/typescript",
-  ].map(require.resolve),
+  extends: ["prettier", "eslint-config-turbo"],
   parserOptions: {
     project,
   },
@@ -30,6 +27,9 @@ module.exports = {
         project,
       },
     },
+  },
+  rules: {
+    "@typescript-eslint/no-unsafe-assignment": "off",
   },
   ignorePatterns: ["node_modules/", "dist/"],
 };

@@ -1,0 +1,1 @@
+{"2425142c6b3229fc140b00b82499ae0962356524fde6c3e5c4022161ff34d80e":{"status":"success","do":"add the numbers given","code":{"id":"7da7eb28-b9e9-46b5-960e-15d91c17d101","fn":"async function addNumbers({ input }) {\n  // Sum all the numbers in the input array\n  const sum = input.reduce((acc, num) => acc + num, 0);\n  return sum;\n}"},"iterations":[]}}

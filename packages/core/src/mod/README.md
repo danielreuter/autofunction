@@ -1,0 +1,1 @@
+This is forked from `zod-to-json-schema`. It extends the JSON schema specification to support types like functions, void, etc.
