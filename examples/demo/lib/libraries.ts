@@ -1,18 +1,26 @@
 import { generateId as nanoid } from "ai";
 import { library } from "autofunction";
 import { z } from "zod";
-import { Table, TableCaption, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../components/ui/table";
+import {
+  Table,
+  TableCaption,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../components/ui/table";
 import { jsx } from "./schemas";
 
 export const utils = library({
-  name: "utils", 
+  name: "utils",
   items: {
-    generateId: () => nanoid(8)
+    generateId: () => nanoid(8),
   },
   documentation: {
-    generateId: z.function().args().returns(z.string())
-  }
-})
+    generateId: z.function().args().returns(z.string()),
+  },
+});
 
 // doesn't work with JSX yet... todo
 
@@ -22,7 +30,7 @@ export const utils = library({
 // }).describe("react component props");
 
 // function component(extras?: Record<string, z.ZodType<any>>) {
-//   return z.function() 
+//   return z.function()
 //     .args(extras ? props.extend(extras) : props)
 //     .returns(jsx)
 // }

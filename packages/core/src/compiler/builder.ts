@@ -9,7 +9,9 @@ import { AnyLibrary } from "./library";
 
 export type Compiler = <TSpec extends AnySpec>(
   spec: TSpec,
-  manualOverride?: (input: z.input<TSpec["in"]>) => Promise<z.output<TSpec["out"]>>
+  manualOverride?: (
+    input: z.input<TSpec["in"]>,
+  ) => Promise<z.output<TSpec["out"]>>,
 ) => (input: z.input<TSpec["in"]>) => Promise<z.output<TSpec["out"]>>;
 
 export type CompileFn<TSpec extends AnySpec> = Fn<TSpec>["compile"];
@@ -43,7 +45,7 @@ export class CompilerBuilder<
   TImports extends Record<string, AnyLibrary>,
   TConfig extends AnyCompilerConfig = CompilerConfig<TCompileFn, TImports>,
 > {
-  config: TConfig
+  config: TConfig;
 
   constructor(
     public repo: FnRepository,
@@ -97,13 +99,13 @@ export class CompilerBuilder<
 }
 
 /**
- * 
+ *
  * @param param0 Settings, including the path to the repository
  * @returns A compiler builder
  */
 export function createCompiler({ path }: { path: string }) {
   const repo = new FnRepository({ path, test: false });
   return (config?: AnyCompilerConfig) => {
-    return new CompilerBuilder(repo, config)
-  }
+    return new CompilerBuilder(repo, config);
+  };
 }

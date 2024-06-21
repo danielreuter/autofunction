@@ -33,11 +33,11 @@ export function createTestPath() {
     throw new Error("TEST_PATH must point to 'src/repository.'.");
   }
 
-  return result.data
+  return result.data;
 }
 
 describe("Test fs read/delete operations", async () => {
-  const fnPath = createFnPath(createTestPath())
+  const fnPath = createFnPath(createTestPath());
 
   beforeAll(async () => {
     await deleteRepository(fnPath);
@@ -57,20 +57,14 @@ const differentSnapshots = Array(1000)
   .fill(0)
   .map(
     (_, i) =>
-      [
-        `id-${i}`,
-        Snapshot.compiling({ do: `description-${i}` })
-      ] as const,
+      [`id-${i}`, Snapshot.compiling({ do: `description-${i}` })] as const,
   );
 
 const sameSnapshots = Array(1000)
   .fill(0)
   .map(
     (_, i) =>
-      [
-        `same-id`,
-        Snapshot.compiling({ do: `description-${i}` })
-      ] as const,
+      [`same-id`, Snapshot.compiling({ do: `description-${i}` })] as const,
   );
 
 describe("Test the cache", () => {

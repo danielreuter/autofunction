@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export type Library<
   TName extends string,
-  TKeys extends string ,
+  TKeys extends string,
   TDocumentation extends Record<TKeys, z.ZodTypeAny>,
 > = {
   name: TName;
   items: {
     [K in TKeys]: z.infer<TDocumentation[K]>;
-  }
+  };
   documentation: TDocumentation;
 };
 
@@ -22,7 +22,11 @@ export function library<
   name,
   items,
   documentation,
-}: Library<TName, TKeys, TDocumentation>): Library<TName, TKeys, TDocumentation> {
+}: Library<TName, TKeys, TDocumentation>): Library<
+  TName,
+  TKeys,
+  TDocumentation
+> {
   return { name, items, documentation };
 }
 

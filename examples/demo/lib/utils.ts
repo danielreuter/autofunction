@@ -1,15 +1,15 @@
 import { Compiler } from "autofunction";
 import { z } from "zod";
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export function pipeline<
   TIn extends z.ZodTypeAny,
-  TSchemas extends [z.ZodTypeAny, ...z.ZodTypeAny[]]
+  TSchemas extends [z.ZodTypeAny, ...z.ZodTypeAny[]],
 >(compiler: Compiler, schemas: TSchemas) {
   return async (input: z.input<TIn>) => {
     let currentInputSchema = schemas[0] as z.ZodTypeAny;
@@ -18,12 +18,11 @@ export function pipeline<
       const transformFn = compiler({
         do: "",
         in: currentInputSchema,
-        out: schema
-      })
+        out: schema,
+      });
       current = await transformFn(current);
       currentInputSchema = schema;
     }
     return current;
-  }
+  };
 }
-

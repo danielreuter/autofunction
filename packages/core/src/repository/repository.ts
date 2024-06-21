@@ -37,7 +37,7 @@ export class FnRepository {
     } else if (snapshot?.status === "failure") {
       throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
     } else {
-      throw RuntimeError.internal("Failed to retrieve code")
+      throw RuntimeError.internal("Failed to retrieve code");
     }
   }
 
@@ -90,7 +90,6 @@ export class FnRepository {
           handleIteration: iterations.push,
         });
 
-        
         try {
           const code = await fn.compile({ spec, parse, createTester });
           return Snapshot.success({ do: fn.fullSpec.do, code, iterations });

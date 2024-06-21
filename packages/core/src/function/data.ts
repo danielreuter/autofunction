@@ -39,7 +39,7 @@ export class Snapshot {
   constructor() {}
 
   static success(
-    data: Omit<FnSnapshotSuccess, "status" | "timestamp">
+    data: Omit<FnSnapshotSuccess, "status" | "timestamp">,
   ): FnSnapshotSuccess {
     return {
       ...data,
@@ -49,7 +49,7 @@ export class Snapshot {
   }
 
   static failure(
-    data: Omit<FnSnapshotFailure, "status" | "timestamp">
+    data: Omit<FnSnapshotFailure, "status" | "timestamp">,
   ): FnSnapshotFailure {
     return {
       ...data,
@@ -59,7 +59,7 @@ export class Snapshot {
   }
 
   static compiling(
-    data: Omit<FnSnapshotCompiling, "status" | "timestamp">
+    data: Omit<FnSnapshotCompiling, "status" | "timestamp">,
   ): FnSnapshotCompiling {
     return {
       ...data,

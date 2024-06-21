@@ -33,7 +33,7 @@ export class FnCache {
     return {
       metadata: this.metadata,
       data: this.data,
-    }
+    };
   }
 
   writeData = lodash.debounce(
@@ -96,7 +96,7 @@ export class FnCache {
 
   // async constructor
   static async create(_dir: string, test: boolean) {
-    const dir = createFnPath(_dir)
+    const dir = createFnPath(_dir);
     if (test) {
       await deleteRepository(dir); // start fresh
     }
@@ -137,9 +137,9 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
   const cachePath = path.join(dir, "cache.json");
   if (!exists(cachePath)) {
     const disk = {
-      metadata: {}, 
-      data: {}
-    }
+      metadata: {},
+      data: {},
+    };
     await retry(async () => {
       await fs.promises.writeFile(cachePath, JSON.stringify(disk), "utf8");
     });
@@ -148,9 +148,7 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
   return created;
 }
 
-export async function readRepositoryDisk(
-  dir: string,
-): Promise<FnDisk> {
+export async function readRepositoryDisk(dir: string): Promise<FnDisk> {
   await createRepositoryIfDoesNotExist(dir);
   return await retry(async () => {
     const serializedDisk = await fs.promises.readFile(

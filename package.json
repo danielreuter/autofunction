@@ -11,9 +11,8 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "turbo run build && changeset publish",
-    "fix": "turbo lint && npm run format",
-    "typecheck": "turbo typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx}\""
+    "fix": "turbo lint && turbo format:write",
+    "typecheck": "turbo typecheck"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
