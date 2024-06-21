@@ -128,6 +128,7 @@ export async function deleteRepository(dir: string) {
 export async function createRepositoryIfDoesNotExist(dir: string) {
   const created = { dir: false, cache: false };
   if (!exists(dir)) {
+    console.log("Creating repository at", dir);
     await retry(async () => {
       await fs.promises.mkdir(dir, { recursive: true });
     });
@@ -136,6 +137,7 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
 
   const cachePath = path.join(dir, "cache.json");
   if (!exists(cachePath)) {
+    console.log("Creating cache.json at", cachePath);
     const disk = {
       metadata: {},
       data: {},
@@ -149,6 +151,7 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
 }
 
 export async function readRepositoryDisk(dir: string): Promise<FnDisk> {
+  console.log("Reading repository disk at", dir);
   await createRepositoryIfDoesNotExist(dir);
   return await retry(async () => {
     const serializedDisk = await fs.promises.readFile(

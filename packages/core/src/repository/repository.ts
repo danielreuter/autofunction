@@ -29,18 +29,6 @@ export class FnRepository {
     });
   }
 
-  async getFnCode(id: string): Promise<Code> {
-    const cache = await this.cache;
-    const snapshot = await cache.get(id);
-    if (snapshot?.status === "success") {
-      return snapshot.code;
-    } else if (snapshot?.status === "failure") {
-      throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
-    } else {
-      throw RuntimeError.internal("Failed to retrieve code");
-    }
-  }
-
   async declareFn(fn: AnyFn) {
     this.fns[fn.id] = fn;
     const cache = await this.cache;
@@ -53,7 +41,7 @@ export class FnRepository {
         case "success":
           return fn.createExecutor(snapshot.code);
         case "failure":
-          throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
+          throw snapshot.error;
         default:
           throw RuntimeError.internal("Failed to declare function");
       }
@@ -107,7 +95,7 @@ export class FnRepository {
       case "success":
         return snapshot.code;
       case "failure":
-        throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
+        throw snapshot.error;
       default:
         throw RuntimeError.internal("Compiling status stuck in limbo");
     }

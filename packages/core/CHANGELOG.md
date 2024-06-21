@@ -1,5 +1,11 @@
 # smart-fn
 
+## 0.0.5
+
+### Patch Changes
+
+- unobfuscated errors
+
 ## 0.0.4
 
 ### Patch Changes

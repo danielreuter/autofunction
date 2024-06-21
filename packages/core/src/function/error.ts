@@ -49,6 +49,9 @@ export class RuntimeError<T extends RuntimeErrorType> extends Error {
     this.code = payload.code;
     this.cause = payload.cause;
     this.data = payload.data;
+    if ((payload.cause as any)?.stack) {
+      this.stack = (payload.cause as any).stack
+    }
   }
 
   static fromValidator(
