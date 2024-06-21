@@ -4,14 +4,23 @@ import { RuntimeError, RuntimeErrorPayload } from "../function/error";
 import path from "path";
 import { FnSnapshot } from "../function/data";
 
+export interface FnDisk {
+  metadata: {
+    lastUpdated: number;
+  };
+  data: Record<string, FnSnapshot>;
+}
+
 export class FnCache {
+  metadata: FnDisk["metadata"] = { lastUpdated: Date.now() };
   data: Record<string, FnSnapshot>;
   pending: Record<string, { promise: Promise<FnSnapshot> }> = {};
   dir: string;
 
-  constructor(dir: string, data: Record<string, FnSnapshot>) {
+  constructor(dir: string, disk: FnDisk) {
     this.dir = dir;
-    this.data = data;
+    this.data = disk.data;
+    this.metadata = disk.metadata;
   }
 
   async get(id: string): Promise<FnSnapshot | null> {
@@ -19,14 +28,20 @@ export class FnCache {
     return this.data[id] ?? null;
   }
 
+  get disk(): FnDisk {
+    return {
+      metadata: this.metadata,
+      data: this.data,
+    }
+  }
+
   writeData = lodash.debounce(
     async () => {
       try {
         await createRepositoryIfDoesNotExist(this.dir);
-        const serializedData = JSON.stringify(this.data);
         await fs.promises.writeFile(
           path.join(this.dir, "cache.json"),
-          serializedData,
+          JSON.stringify(this.disk),
           "utf8",
         );
       } catch (error) {
@@ -35,7 +50,7 @@ export class FnCache {
       }
     },
     200,
-    { leading: true, trailing: false },
+    { leading: true, trailing: true },
   );
 
   /**
@@ -80,14 +95,16 @@ export class FnCache {
 
   // async constructor
   static async create(_dir: string, test: boolean) {
-    const dir = path.join(_dir, ".functions");
+    const dir = createFnPath(_dir)
     if (test) {
       await deleteRepository(dir); // start fresh
     }
-    const data = await readRepositoryData(dir);
-    return new FnCache(dir, data);
+    const disk = await readRepositoryDisk(dir);
+    return new FnCache(dir, disk);
   }
 }
+
+export const createFnPath = (dir: string) => path.join(dir, ".functions");
 
 const exists = (path: string) => fs.existsSync(path);
 
@@ -119,23 +136,27 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
   const cachePath = path.join(dir, "cache.json");
   if (!exists(cachePath)) {
     await retry(async () => {
-      await fs.promises.writeFile(cachePath, "{}");
+      const disk = {
+        metadata: {}, 
+        data: {}
+      }
+      await fs.promises.writeFile(cachePath, JSON.stringify(disk), "utf8");
     });
     created.cache = true;
   }
   return created;
 }
 
-export async function readRepositoryData(
+export async function readRepositoryDisk(
   dir: string,
-): Promise<Record<string, FnSnapshot>> {
+): Promise<FnDisk> {
   await createRepositoryIfDoesNotExist(dir);
   return await retry(async () => {
-    const serializedData = await fs.promises.readFile(
+    const serializedDisk = await fs.promises.readFile(
       path.join(dir, "cache.json"),
       "utf8",
     );
-    return JSON.parse(serializedData);
+    return JSON.parse(serializedDisk);
   });
 }
 

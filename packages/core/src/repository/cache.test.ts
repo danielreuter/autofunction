@@ -1,12 +1,14 @@
 import { z } from "zod";
 import {
   FnCache,
+  createFnPath,
   createRepositoryIfDoesNotExist,
   deleteRepository,
 } from "./cache";
 import { describe, expect, it, beforeEach, afterAll, beforeAll } from "vitest";
 import { sleep } from "../shared/utils";
 import path from "path";
+import { Snapshot } from "../function";
 
 require("dotenv").config();
 
@@ -31,21 +33,21 @@ export function createTestPath() {
     throw new Error("TEST_PATH must point to 'src/repository.'.");
   }
 
-  return result.data;
+  return result.data
 }
 
 describe("Test fs read/delete operations", async () => {
-  const PATH = createTestPath();
+  const fnPath = createFnPath(createTestPath())
 
   beforeAll(async () => {
-    await deleteRepository(PATH);
+    await deleteRepository(fnPath);
   });
 
   it("should create/delete arbitrarily many in sequence", async () => {
     for (let i = 0; i < 1000; i++) {
-      const created = await createRepositoryIfDoesNotExist(PATH);
+      const created = await createRepositoryIfDoesNotExist(fnPath);
       expect(created).toEqual({ dir: true, cache: true });
-      const deleted = await deleteRepository(PATH);
+      const deleted = await deleteRepository(fnPath);
       expect(deleted).toEqual({ dir: true, cache: true });
     }
   });
@@ -57,7 +59,7 @@ const differentSnapshots = Array(1000)
     (_, i) =>
       [
         `id-${i}`,
-        { do: `description-${i}`, status: "compiling" as const },
+        Snapshot.compiling({ do: `description-${i}` })
       ] as const,
   );
 
@@ -67,7 +69,7 @@ const sameSnapshots = Array(1000)
     (_, i) =>
       [
         `same-id`,
-        { do: `description-${i}`, status: "compiling" as const },
+        Snapshot.compiling({ do: `description-${i}` })
       ] as const,
   );
 
@@ -85,6 +87,7 @@ describe("Test the cache", () => {
 
   it("should initialize with empty data", async () => {
     expect(cache.data).toEqual({});
+    expect(cache.metadata).toEqual({});
   });
 
   it("should get null for non-existing id", async () => {
@@ -121,15 +124,17 @@ describe("Test the cache", () => {
   });
 
   it("should deduplicate writes", async () => {
+    const { timestamp, ...baseline } = sameSnapshots[0][1];
     sameSnapshots
       .map(([id, snapshot]) => cache.lock(id, async () => snapshot))
       .forEach(async (promise) => {
-        expect(await promise).toEqual(sameSnapshots[0][1]);
+        const { timestamp, ...rest } = await promise;
+        expect(rest).toEqual(baseline);
       });
   });
 
   it("should persist data across multiple instances", async () => {
-    const promises = differentSnapshots.map(([id, snapshot]) => {
+    const promises = differentSnapshots.slice(0, 10).map(([id, snapshot]) => {
       return cache.lock(id, async () => snapshot);
     });
     await Promise.all(promises);

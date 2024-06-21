@@ -10,7 +10,7 @@ import {
   CompilerConfig,
 } from "../compiler/builder";
 import { Code } from "../function/code";
-import { FnIteration } from "../function/data";
+import { FnIteration, Snapshot } from "../function/data";
 import { sleep } from "../shared/utils";
 
 export class FnRepository {
@@ -102,20 +102,18 @@ export class FnRepository {
           handleIteration: iterations.push,
         });
 
+        
         try {
           const code = await fn.compile({ spec, parse, createTester });
-          return { status: "success", do: fn.fullSpec.do, code, iterations };
+          return Snapshot.success({ do: fn.fullSpec.do, code, iterations });
         } catch (err) {
           let error: RuntimeError<any>;
           if (err instanceof RuntimeError) error = err;
           else error = RuntimeError.fromCompiler("Failed to compile", err);
-          return { status: "failure", do: fn.fullSpec.do, error, iterations };
+          return Snapshot.failure({ do: fn.fullSpec.do, error, iterations });
         }
       },
-      {
-        status: "compiling",
-        do: fn.fullSpec.do,
-      },
+      Snapshot.compiling({ do: fn.fullSpec.do }),
     );
   }
 
