@@ -148,7 +148,7 @@ export class RuntimeError<T extends RuntimeErrorType> extends Error {
       code: data.code as any,
       message: data.message,
       cause: data.cause,
-      data: JSON.parse(data.data),
+      data: data.data && JSON.parse(data.data),
     });
   }
 }

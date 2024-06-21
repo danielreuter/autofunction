@@ -1,9 +1,10 @@
 import { Code } from "../function/code";
 import { RuntimeError } from "../function/error";
-import { FnIteration } from "../function/data";
+import { FnIteration, FnSnapshot } from "../function/data";
 import { Trace } from "../function/trace";
 import { ExecutionResult } from "../shared/types";
 import { TestResult } from "../function";
+import { FnDisk } from "./cache";
 
 export function serializeFnIteration(iteration: FnIteration<any>) {
   return {
@@ -74,5 +75,69 @@ export function deserializeTestResult({
     testId,
     codeId,
     ...deserializeExecutionResult(data),
+  };
+}
+
+export function serializeFnSnapshot(snapshot: FnSnapshot) {
+  switch (snapshot.status) {
+    case "success":
+      return {
+        ...snapshot,
+        iterations: snapshot.iterations.map(serializeFnIteration),
+      };
+    case "failure":
+      return {
+        ...snapshot,
+        iterations: snapshot.iterations.map(serializeFnIteration),
+        error: snapshot.error.serialize(),
+      };
+    case "compiling":
+      return snapshot;
+  }
+}
+
+export type SerializedFnSnapshot = ReturnType<typeof serializeFnSnapshot>;
+
+export function deserializeFnSnapshot(data: SerializedFnSnapshot): FnSnapshot {
+  switch (data.status) {
+    case "success":
+      return {
+        ...data,
+        iterations: data.iterations.map(deserializeFnIteration),
+      };
+    case "failure":
+      return {
+        ...data,
+        iterations: data.iterations.map(deserializeFnIteration),
+        error: RuntimeError.deserialize(data.error),
+      };
+    case "compiling":
+      return data;
+  }
+}
+
+export function serializeDisk({ data, metadata }: FnDisk) {
+  return {
+    metadata,
+    data: Object.fromEntries(
+      Object.entries(data).map(([id, snapshot]) => [
+        id,
+        serializeFnSnapshot(snapshot),
+      ]),
+    ),
+  };
+}
+
+export type SerializedDisk = ReturnType<typeof serializeDisk>;
+
+export function deserializeDisk({ data, metadata }: SerializedDisk): FnDisk {
+  return {
+    metadata,
+    data: Object.fromEntries(
+      Object.entries(data).map(([id, snapshot]) => [
+        id,
+        deserializeFnSnapshot(snapshot),
+      ]),
+    ),
   };
 }

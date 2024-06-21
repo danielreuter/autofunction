@@ -9,6 +9,7 @@ import { AnyLibrary } from "./library";
 
 export type Compiler = <TSpec extends AnySpec>(
   spec: TSpec,
+  manualOverride?: (input: z.input<TSpec["in"]>) => Promise<z.output<TSpec["out"]>>
 ) => (input: z.input<TSpec["in"]>) => Promise<z.output<TSpec["out"]>>;
 
 export type CompileFn<TSpec extends AnySpec> = Fn<TSpec>["compile"];
@@ -42,13 +43,27 @@ export class CompilerBuilder<
   TImports extends Record<string, AnyLibrary>,
   TConfig extends AnyCompilerConfig = CompilerConfig<TCompileFn, TImports>,
 > {
+  config: TConfig
+
   constructor(
-    public workspace: FnRepository,
-    public config: TConfig,
-  ) {}
+    public repo: FnRepository,
+    config?: TConfig,
+  ) {
+    // todo - use TS to enforce minimum viability
+    if (config) {
+      this.config = config;
+    } else {
+      this.config = createConfig({
+        compile: async () => {
+          throw new Error("No compile function provided");
+        },
+        imports: {},
+      }) as any;
+    }
+  }
 
   compile(fn: AnyCompileFn): CompilerBuilder<AnyCompileFn, TImports> {
-    return new CompilerBuilder(this.workspace, { ...this.config, compile: fn });
+    return new CompilerBuilder(this.repo, { ...this.config, compile: fn });
   }
 
   import<TLibrary extends AnyLibrary>(
@@ -57,7 +72,7 @@ export class CompilerBuilder<
     TCompileFn,
     TImports & { [key in keyof TLibrary["name"]]: TLibrary }
   > {
-    return new CompilerBuilder(this.workspace, {
+    return new CompilerBuilder(this.repo, {
       ...this.config,
       imports: {
         ...this.config.imports,
@@ -67,15 +82,28 @@ export class CompilerBuilder<
   }
 
   build(): Compiler {
-    return (spec) => {
+    return (spec, manualOverride) => {
+      if (manualOverride) return manualOverride;
       const fn = createFn({ spec, ...this.config });
-      this.workspace.declareFn(fn as any);
+      const executorPromise = this.repo.declareFn(fn as any);
       return async (input) => {
-        const execute = await this.workspace.requestExecutor(fn.id);
+        const execute = await executorPromise;
         const result = await execute(input);
         if (result.success) return result.output;
         throw new RuntimeError(result.error);
       };
     };
+  }
+}
+
+/**
+ * 
+ * @param param0 Settings, including the path to the repository
+ * @returns A compiler builder
+ */
+export function createCompiler({ path }: { path: string }) {
+  const repo = new FnRepository({ path, test: false });
+  return (config?: AnyCompilerConfig) => {
+    return new CompilerBuilder(repo, config)
   }
 }

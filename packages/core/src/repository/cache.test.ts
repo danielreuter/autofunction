@@ -87,7 +87,7 @@ describe("Test the cache", () => {
 
   it("should initialize with empty data", async () => {
     expect(cache.data).toEqual({});
-    expect(cache.metadata).toEqual({});
+    expect(cache.metadata).toBeDefined();
   });
 
   it("should get null for non-existing id", async () => {

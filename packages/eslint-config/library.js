@@ -29,7 +29,7 @@ module.exports = {
     },
   },
   rules: {
-    "@typescript-eslint/no-unsafe-assignment": "off",
+    "@typescript-eslint/no-unsafe-assignment": "off"
   },
   ignorePatterns: ["node_modules/", "dist/"],
 };

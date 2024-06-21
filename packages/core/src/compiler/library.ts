@@ -2,25 +2,27 @@ import { z } from "zod";
 
 export type Library<
   TName extends string,
-  TDocumentation extends Record<string, z.ZodTypeAny>,
+  TKeys extends string ,
+  TDocumentation extends Record<TKeys, z.ZodTypeAny>,
 > = {
   name: TName;
   items: {
-    [K in keyof TDocumentation]: z.infer<TDocumentation[K]>;
-  };
+    [K in TKeys]: z.infer<TDocumentation[K]>;
+  }
   documentation: TDocumentation;
 };
 
-export type AnyLibrary = Library<any, any>;
+export type AnyLibrary = Library<any, any, any>;
 
 export function library<
   TName extends string,
-  TDocumentation extends Record<string, z.ZodType<any>>,
+  TKeys extends string,
+  TDocumentation extends Record<TKeys, z.ZodType<any>>,
 >({
   name,
   items,
   documentation,
-}: Library<TName, TDocumentation>): Library<TName, TDocumentation> {
+}: Library<TName, TKeys, TDocumentation>): Library<TName, TKeys, TDocumentation> {
   return { name, items, documentation };
 }
 

@@ -29,47 +29,35 @@ export class FnRepository {
     });
   }
 
-  async getFnCode(id: string): Promise<Code | undefined> {
+  async getFnCode(id: string): Promise<Code> {
     const cache = await this.cache;
     const snapshot = await cache.get(id);
     if (snapshot?.status === "success") {
       return snapshot.code;
+    } else if (snapshot?.status === "failure") {
+      throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
+    } else {
+      throw RuntimeError.internal("Failed to retrieve code")
     }
   }
 
   async declareFn(fn: AnyFn) {
     this.fns[fn.id] = fn;
-
-    // Compile declared fn if code DNE
-    const code = await this.getFnCode(fn.id);
-    if (code) {
+    const cache = await this.cache;
+    const snapshot = await cache.get(fn.id);
+    if (!snapshot) {
+      const code = await this.runCompile(fn);
       return fn.createExecutor(code);
     } else {
-      await this.runCompile(fn);
-    }
-  }
-
-  async requestExecutor(fnId: string) {
-    const fn = this.fns[fnId];
-    const code = await this.getFnCode(fnId);
-    if (code) {
-      return fn.createExecutor(code);
-    } else {
-      await this.runCompile(fn);
-      // todo: sketchy auto-recompilation
-      const newCode = await this.getFnCode(fnId);
-      if (!newCode) {
-        // this is obscuring deeper errors
-        throw RuntimeError.internal(
-          "Recompilation succeeded but didn't properly write code",
-        );
+      switch (snapshot.status) {
+        case "success":
+          return fn.createExecutor(snapshot.code);
+        case "failure":
+          throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
+        default:
+          throw RuntimeError.internal("Failed to declare function");
       }
-      return fn.createExecutor(newCode);
     }
-  }
-
-  createCompiler(config: AnyCompilerConfig) {
-    return new CompilerBuilder(this, config);
   }
 
   /**
@@ -80,9 +68,9 @@ export class FnRepository {
    *
    * @param fn - The function to compile.
    */
-  async runCompile(fn: AnyFn) {
+  async runCompile(fn: AnyFn): Promise<Code> {
     const cache = await this.cache;
-    await cache.lock(
+    const snapshot = await cache.lock(
       fn.id,
       async () => {
         const iterations: FnIteration<any>[] = [];
@@ -115,6 +103,15 @@ export class FnRepository {
       },
       Snapshot.compiling({ do: fn.fullSpec.do }),
     );
+
+    switch (snapshot.status) {
+      case "success":
+        return snapshot.code;
+      case "failure":
+        throw RuntimeError.fromCompiler("Failed to compile", snapshot.error);
+      default:
+        throw RuntimeError.internal("Compiling status stuck in limbo");
+    }
   }
 
   static create({ path }: { path: string }): FnRepository {

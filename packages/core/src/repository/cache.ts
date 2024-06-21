@@ -3,6 +3,7 @@ import fs from "fs";
 import { RuntimeError, RuntimeErrorPayload } from "../function/error";
 import path from "path";
 import { FnSnapshot } from "../function/data";
+import { deserializeDisk, serializeDisk } from "./serialization";
 
 export interface FnDisk {
   metadata: {
@@ -135,11 +136,11 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
 
   const cachePath = path.join(dir, "cache.json");
   if (!exists(cachePath)) {
+    const disk = {
+      metadata: {}, 
+      data: {}
+    }
     await retry(async () => {
-      const disk = {
-        metadata: {}, 
-        data: {}
-      }
       await fs.promises.writeFile(cachePath, JSON.stringify(disk), "utf8");
     });
     created.cache = true;
@@ -156,7 +157,8 @@ export async function readRepositoryDisk(
       path.join(dir, "cache.json"),
       "utf8",
     );
-    return JSON.parse(serializedDisk);
+    const parsedDisk = JSON.parse(serializedDisk);
+    return deserializeDisk(parsedDisk);
   });
 }
 
