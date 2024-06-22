@@ -141,12 +141,14 @@ Each configuration method—`import` and `compile`, currently—returns a new co
 
 ### Default configuration
 
-The library exposes a default `CompilerConfig`. Its `compile` method tries to write a valid function five times, testing each attempt against a handful of synthetic inputs and passing the full execution history into context.
+The library exposes a default set of configurations you can use to quickly get started. 
 
-You can initialize it with a language model of your choice using [one of Vercel's AI providers](https://sdk.vercel.ai/providers/ai-sdk-providers), e.g. GPT-4o, as in the following example:
+The default `compile` method is very simple—it tries to write a valid function five times, testing against a handful of synthetic inputs and learning each iteration from previous execution traces. On failure, it consults the full trace and writes a detailed report of what it thinks went wrong. This report is then thrown as an error.
+
+You can initialize the default configuration with a language model of your choice via [one of Vercel's AI providers](https://sdk.vercel.ai/providers/ai-sdk-providers). The following uses Claude 3.5 Sonnet:
 
 ```ts
-import { openai } from '@ai/openai';
+import { anthropic } from '@ai/anthropic';
 import { createCompiler, createDefaultConfig } from 'autofunction';
 
 const compiler = createCompiler({
@@ -154,7 +156,7 @@ const compiler = createCompiler({
 });
 
 const config = createDefaultConfig({
-  model: openai('gpt-4o'),
+  model: anthropic('claude-3.5-sonnet'),
 });
 
 const auto = compiler(config).build();
