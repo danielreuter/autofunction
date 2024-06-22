@@ -103,8 +103,8 @@ export class CompilerBuilder<
  * @param param0 Settings, including the path to the repository
  * @returns A compiler builder
  */
-export function createCompiler({ path }: { path: string }) {
-  const repo = new FnRepository({ path, test: false });
+export function createCompiler({ path, log }: { path: string; log?: boolean }) {
+  const repo = new FnRepository({ path, test: false, log });
   return (config?: AnyCompilerConfig) => {
     return new CompilerBuilder(repo, config);
   };

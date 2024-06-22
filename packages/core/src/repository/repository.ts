@@ -17,8 +17,8 @@ export class FnRepository {
   cache: Promise<FnCache>;
   fns: Record<string, AnyFn>;
 
-  constructor({ path, test }: { path: string; test: boolean }) {
-    this.cache = FnCache.create(path, test);
+  constructor({ path, test, log }: { path: string; test: boolean, log?: boolean }) {
+    this.cache = FnCache.create(path, test, log);
     this.fns = {};
 
     // Wait briefly then write new fn declarations to disk

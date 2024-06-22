@@ -1,5 +1,11 @@
 # smart-fn
 
+## 0.0.6
+
+### Patch Changes
+
+- verbose option for logging
+
 ## 0.0.5
 
 ### Patch Changes

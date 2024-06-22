@@ -95,12 +95,12 @@ export class FnCache {
   }
 
   // async constructor
-  static async create(_dir: string, test: boolean) {
+  static async create(_dir: string, test: boolean, verbose = false) {
     const dir = createFnPath(_dir);
     if (test) {
-      await deleteRepository(dir); // start fresh
+      await deleteRepository(dir, verbose); // start fresh
     }
-    const disk = await readRepositoryDisk(dir);
+    const disk = await readRepositoryDisk(dir, verbose);
     return new FnCache(dir, disk);
   }
 }
@@ -109,8 +109,10 @@ export const createFnPath = (dir: string) => path.join(dir, ".functions");
 
 const exists = (path: string) => fs.existsSync(path);
 
-export async function deleteRepository(dir: string) {
+export async function deleteRepository(dir: string, verbose = false) {
+  const log = verbose ? console.log : () => {};
   return await retry(async () => {
+    log("Deleting repository at", dir);
     const deleted = { dir: false, cache: false };
     const cachePath = path.join(dir, "cache.json");
     if (exists(dir)) {
@@ -121,15 +123,21 @@ export async function deleteRepository(dir: string) {
       fs.rmdirSync(dir);
       deleted.dir = true;
     }
+    log("Deleted repository", deleted);
     return deleted;
   });
 }
 
-export async function createRepositoryIfDoesNotExist(dir: string) {
+export async function createRepositoryIfDoesNotExist(dir: string, verbose = false) {
+  const log = verbose ? console.log : () => {};
   const created = { dir: false, cache: false };
+  if (verbose) {
+    log("Creating repository at", dir);
+  }
   if (!exists(dir)) {
-    console.log("Creating repository at", dir);
+    log("Creating repository at", dir);
     await retry(async () => {
+      log("Creating directory at", dir);
       await fs.promises.mkdir(dir, { recursive: true });
     });
     created.dir = true;
@@ -137,12 +145,13 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
 
   const cachePath = path.join(dir, "cache.json");
   if (!exists(cachePath)) {
-    console.log("Creating cache.json at", cachePath);
+    log("Creating cache.json at", cachePath);
     const disk = {
       metadata: {},
       data: {},
     };
     await retry(async () => {
+      log("Writing cache.json at", cachePath, JSON.stringify(disk, null, 2));
       await fs.promises.writeFile(cachePath, JSON.stringify(disk), "utf8");
     });
     created.cache = true;
@@ -150,16 +159,22 @@ export async function createRepositoryIfDoesNotExist(dir: string) {
   return created;
 }
 
-export async function readRepositoryDisk(dir: string): Promise<FnDisk> {
-  console.log("Reading repository disk at", dir);
-  await createRepositoryIfDoesNotExist(dir);
+export async function readRepositoryDisk(dir: string, verbose = false): Promise<FnDisk> {
+  const log = verbose ? console.log : () => {};
+  log("Reading repository disk at", dir);
+  await createRepositoryIfDoesNotExist(dir, verbose);
   return await retry(async () => {
+    log("Reading cache.json at", path.join(dir, "cache.json"));
     const serializedDisk = await fs.promises.readFile(
       path.join(dir, "cache.json"),
       "utf8",
     );
+    log("Deserializing cache.json", serializedDisk);
     const parsedDisk = JSON.parse(serializedDisk);
-    return deserializeDisk(parsedDisk);
+    log("Deserialized cache.json", parsedDisk);
+    const result = deserializeDisk(parsedDisk);
+    log("Deserialized disk", result);
+    return result;
   });
 }
 
