@@ -1,8 +1,10 @@
 # autofunction
 
-This library provides a way to define functions that write themselves. We will refer to this class of functions as _autofunctions_.
+Autofunction is an experimental framework for metaprogramming with language models. It provides a high-level API for defining functions that in some sense write themselves—autofunctions. 
 
-Autofunctions are declared by passing a specification into an AI-based compiler, which can use live data from the main thread to autonomously test and debug the code it writes. This pattern, while presenting serious security challenges, makes effective use of a language model's iteration speed to quickly converge to functions that work.
+The library emphasizes the use of *code* to prompt programming agents, allowing you to write precise, reusable commands whose implementations can be validated by the application at runtime.
+
+Agents are run on the main thread, which means they can use live data to autonomously test and debug the code they write. This pattern, while presenting serious security challenges, makes effective use of a language model's iteration speed to quickly converge to functions that work.
 
 ## Features
 
@@ -19,163 +21,160 @@ npm install autofunction
 ## Overview
 
 - [Risks](#risks)
-- [Usage](#usage)
-- [Building a compiler](#building-a-compiler)
-  - [Default configuration](#default-configuration)
-  - [Imports](#importing-custom-libraries)
-  - [Customizing the `compile` function](#compile)
-  - [Handling errors](#handling-errors)
+- [Basic usage](#usage)
 - [VS Code extension](#vs-code-extension)
-
+- [Importing libraries](#importing-resources)
+- [Tasks](#tasks)
+- [Example: metaprogramming a SQL backend](#handling-errors)
 
 ## Risks
 
 Autofunctions use JavaScript's built-in `eval` function to dynamically run and test themselves. `eval` will be called from the main thread of your application, which means that the code being evaluated will likely be able to do anything with any of the files contained anywhere in your codebase. By default it will have root access.
 
-This is generally considered very bad practice—the [official JavaScript documentation of the `eval` function](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval) even has a section called ["Never use direct eval()!"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval#never_use_direct_eval!). **_You are strongly encouraged to read this before continuing, because that is precisely what this library does, extensively._**
-
+This is generally considered bad practice—the [official JavaScript documentation of the `eval` function](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval) even has a section called ["Never use direct eval()!"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval#never_use_direct_eval!). **_You are strongly encouraged to read this before continuing, because that is precisely what this library does, extensively._**
 
 ## Usage
 
-An autofunction is defined by passing a _spec_ into a _compiler_.
+An autofunction is implemented by a passing a _spec_ into a _compiler_.
 
-This spec will describe some desired function using a mixture of natural language and [Zod schemas](https://github.com/colinhacks/zod), allowing the application to enforce rigid type constraints on the function's input and output behavior.
+This spec describes some desired function using a sequence of natural language notes and [Zod schemas](https://github.com/colinhacks/zod), allowing the application to enforce rigid type constraints on the function's behavior. 
 
-A compiler will take a spec in this format and return an AI-generated asynchronous function that implements it—an autofunction.
+A compiler takes this spec and generates an asynchronous function that implements it—an autofunction.
 
-You can define a simple compiler in ten lines of code (see [default configuration](#default-configuration)).
+Start by configuring a location in your filesystem where autofunctions can store their code. They will only ever read from or write to this one place:
 
-Here's how you might ultimately use a compiler, in this case one named `auto`:
+```ts
+import { createAutofunction } from 'autofunction';
+
+const autofunction = createAutofunction({
+  repo: 'C:/some/absolute/path',
+})
+```
+
+To then declare an autofunction, first define its compiler using [a language model supported by Vercel's AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/overview). The following uses GPT-4o to implement a trivial autofunction that sums an array of numbers:
 
 ```ts
 import { z } from 'zod';
-import { auto } from 'path/to/your/compilers';
+import { openai } from '@ai-sdk/openai';
 
-const sum = auto({
-  do: 'sum the numbers given', // what the function *does*
-  in: z.number().array(),      // what the function *takes*
-  out: z.number(),             // what the function *returns*
-});
+const sum = autofunction
+  .compiler(openai("gpt-4o")) // 1. the language model to use
+  .take(z.number().array())   // 2. the type the function *takes*
+  .note("Sum the numbers")    // 3. an inline note for the model
+  .return(z.number())         // 4. the type the function *returns*
+  .implement()                // 5. finally convert to a function
 
 await sum([1, 2, 3, 4]); // returns 10, hopefully
 ```
 
-When an autofunction like `sum` is called, it first checks its code repository for an implementation of its assigned spec. If no existing code is found, then it will compile, using a language model to generate and test new code. In either case if all goes well it will execute the code and return the result.
+Here the calls to `take`, `note`, and `return` are chained together to form the notion of a "spec," describing precisely some expected flow of data through the function.
 
-The novel feature of this setup is that compilers can autonomously iterate on the code they write, learning from tests, execution traces, and actual application data in lieu of direct oversight.
+You can think of a spec as a three-sided contract between you, the application, and the language model, ensuring that all parties are in agreement about the function's intended behavior.
+
+In the case of `sum`, the application knows to expect a number as an output, otherwise emitting an error that the compiler can learn from. TypeScript will also infer the correct input and output types at compile-time.
+
+The language model for its part sees the spec in the following format:
+
+```txt
+Please implement this function:
+```js
+async function f(input) {
+  // Sum the numbers
+
+}
+``
+Here is the function's expected interface phrased as an extended JSON schema:
+```json
+{
+  "input": {
+    "type": "array",
+    "items": {
+      "type": "number"
+    }
+  },
+  "output": {
+    "type": "number",
+    "promise": true
+  }
+}
+``
+Write the full function in JavaScript inside of triple backticks.
+```
+
+When `sum` is called, it checks its code repository for an implementation of its current spec. If no existing code is found, then it will compile itself, using the specified language model to generate and test new code. In either case if all goes well it will execute the code and return the result. 
+
+One novel feature of this setup is that compilers can autonomously iterate on the code they write, learning from tests, execution traces, and actual application data in lieu of direct oversight.
 
 You will notice, then, that the first call to an autofunction whose spec has just been changed, however slightly, will take some time, while any subsequent calls will be fast.
 
 ```ts
-const sum = compiler({
-  do: 'sum the numbers given',
-  in: z.number().array().array(), // now takes *nested* arrays
-  out: z.number(),
-});
+const sum = autofunction
+  .compiler("gpt-4o")
+  .take(z.number().array().array()) // now takes *nested* arrays
+  .comment("Sum the numbers")
+  .return(z.number())
+  .implement()
 
 await sum([[1, 2], [3, 4]]); // execution: 2647ms (had to compile)
 await sum([[1, 2, 3], [4]]); // execution: 2ms
 await sum([[1], [2, 3, 4]]); // execution: 2ms
 ```
 
+Specs, then, are like standing orders—when you change the shape of your data, any dependent functions will recompile. In this way an autofunction defines a family of functions parametrized by the types and notes in its spec, which can be changed without necessarily breaking the application.
+
+You can stabilize the compilation process by specifying intermediate checkpoints of the function's data using the `then` method. It takes a type and instructs the model to generate an in-context utility function that returns that type. `then` statements are compiled in sequence. 
+
+For instance, you could take the previous `sum` logic and extend it to detect whether the sum is even or odd:
+
+```ts
+const sumIsEven = autofunction
+  .compiler("gpt-4o")
+  .take(z.number().array())
+  .note("Sum the numbers")
+  .then(z.number())
+  .note("Return true if the sum is even, false otherwise")
+  .return(z.boolean())
+  .implement()
+
+await sumIsEven([1, 2, 3, 4]); // returns true, hopefully
+```
+
+Then what this looks like:
+
+```txt
+// 
+```
+
+This allows you to cut the space of possible intermediate computations the model can output.  
+
+Autofunction declarations end with a call to `implement`, which optionally takes a hardcoded implementation of the function:
+
+```ts
+const sum = autofunction
+  .compiler("gpt-4o")
+  .take(z.number().array())
+  .comment("Sum the numbers")
+  .return(z.number())
+  .implement(async (numbers) => {
+    return numbers.reduce((a, b) => a + b, 0)
+  })
+```
+
+Functions passed to `implement` in this way bypass the compilation process entirely, serving as a sort of manual override if the compiler keeps failing.
+
+## VS Code extension
+
 The code that implements an autofunction is not contained in its declaration—it is instead written to the `.functions` directory and dynamically imported at runtime. 
 
-To view and edit this code, you can download the [Autofunction VS Code extension](#vs-code-extension). This will render relevant commands directly above each call to a compiler, including a link to extensive debugging information in the event of an error.
+To view and edit this code, you can download the [Autofunction VS Code extension](#vs-code-extension). 
 
-You can manually override AI-generated code at any time by passing a function into the compiler as its second argument:
+The extension displays a "Paste code" command above each autofunction that will inject the current model-generated code into your editor as an argument to `implement`, allowing you to freely edit it.
 
-```ts
-const sum = compiler({
-  do: 'sum the numbers given',
-  in: z.number().array(),
-  out: z.number(),
-}, (numbers) => {
-  return numbers.reduce((a, b) => a + b, 0)
-});
-```
+In the event of an error, the extension will display a link to extensive debugging information that you can paste into a Markdown file for you to read or into a chat window for another language model to inspect.
 
-`sum` will now just call the function you provided, bypassing the compilation process entirely. This hardcoded function will be implicitly typed and validated by Zod.
+## Importing resources
 
-The VS Code extension provides a "Paste code" command that will pass the current AI-generated implementation in as the manual override. You should use this before deploying functions to production if your environment cannot reliably read from the filesystem at runtime, e.g. in a serverless environment.
-
-## Building a compiler
-
-A compiler is a function that takes a spec and returns an autofunction.
-
-You will likely want to create a number of compilers, each with its own set of instructions and resources. Think of them as dynamic libraries, tailored to programming particular types of functions using particular sets of tools. You might give them generic names like:
-- `rsc`—generates React Server Components using your component library
-- `transform`—handles data transformations using `lodash`
-- `sql`—executes SQL queries against a database using `drizzle-orm`
-- `datetime`—manipulates datetime strings and objects using the `date-fns` library
-
-Testing strategies may differ across compilers. For instance, `sql` might wrap its tests in transactions, while `transform` could test against twenty inputs generated adversarially from the actual dataset its functions will operate on.
-
-### Initialization
-
-The entry point to the library is the `createCompiler` function. Point it to a location in your filesystem where it can store its code—make sure to use an *absolute path*. 
-
-```ts
-import { createCompiler } from 'autofunction';
-
-// creates 'C:/some/absolute/path/.functions'
-const compiler = createCompiler({
-  path: 'C:/some/absolute/path', 
-})
-```
-
-`compiler` here is a helper function that initializes a blank compiler configuration that you will then iteratively build up by calling its methods.
-
-At a high level that might look like the following, which defines a new compiler called `auto`:
-
-```ts
-const auto = compiler() // start with a blank configuration
-  .import(...)  // import library A
-  .import(...)  // import library B
-  .compile(...) // define code generation and testing logic
-  .build()      // convert to a function, ending the process
-```
-
-The configuration process ends with a call to `build`, which returns a fully configured compiler that you can use elsewhere to define autofunctions. 
-
-Each configuration method—`import` and `compile`, currently—returns a new configuration object with an additional setting applied, leaving its parent unmodified. This allows you to neatly define small logical building blocks that you can reuse across compilers.
-
-### Default configuration
-
-The library exposes a default set of configurations you can use to quickly get started. 
-
-The default `compile` method is very simple—it tries to write a valid function five times, testing against a handful of synthetic inputs and learning each iteration from previous execution traces. On failure, it consults the full trace and writes a detailed report of what it thinks went wrong. This report is then thrown as an error.
-
-You can initialize the default configuration with a language model of your choice via [one of Vercel's AI providers](https://sdk.vercel.ai/providers/ai-sdk-providers). The following uses Claude 3.5 Sonnet:
-
-```ts
-import { anthropic } from '@ai/anthropic';
-import { createCompiler, createDefaultConfig } from 'autofunction';
-
-const compiler = createCompiler({
-  path: 'C:/some/absolute/path', // change this
-});
-
-const config = createDefaultConfig({
-  model: anthropic('claude-3.5-sonnet'),
-});
-
-const auto = compiler(config).build();
-
-// usage
-const sum = auto({
-  do: 'sum the numbers given',
-  in: z.number().array(),
-  out: z.number(),
-});
-
-await sum([1, 2, 3, 4]); // returns 10, hopefully
-```
-
-In this code we passed an initial configuration into the `compiler` helper function—doing so allows you to optionally define a default configuration that can then be extended with additional settings.
-
-### `import`
-
-Compilers can import resources from elsewhere in your application using the `import` method.
+Autofunctions can import resources from elsewhere in your application using the `import` method.
 
 You can document these resources precisely using the `library` helper. It takes three properties:
 
@@ -187,74 +186,112 @@ Using Zod schemas to structure documentation in this way means that TypeScript c
 
 [Zod's `describe` method](https://zod.dev/?id=describe) can be used to inform the compiler about any additional details that are not directly captured by the data types. 
 
-The following example uses [Drizzle ORM](https://github.com/drizzle-team/drizzle-orm) to create a library containing everything a language model needs to execute queries against a PostgreSQL database.
-
-> This code will work, but may result in unexpected behavior if the model makes a mistake—be careful. The next version of the API will make it easier to proxy/throttle sensitive resources during testing.
+To illustrate with another trivial example, suppose your database is just a key-value store like Redis. You could give your autofunctions access to this database by creating a `library` object containing its query functions, and then importing it into your compiler:
 
 ```ts
+import { Redis } from '@upstash/redis'
 import { library } from 'autofunction';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { sql } from 'drizzle-orm';
-import postgres from 'postgres';
 
-// Set up the connection
-const connectionString = process.env.DATABASE_URL;
-const client = postgres(connectionString);
+const db = new Redis({
+  url: 'https://alert-sailfish-50042.upstash.io',
+  token: '********',
+})
 
-// Create the Drizzle database object
-const db = drizzle(client);
+const data = z.object({
+  id: z.string(),
+}).describe("Some data type")
 
-const drizzleLib = library({
-  name: 'drizzle', // some unique name for your library
-  items: {
-    db: db,   // pass in Drizzle's database object
-    sql: sql, // pass in Drizzle's SQL templating function
-  },
+const redis = library({
+  name: 'redis',
+  items: { db },
   documentation: {
-    db: z
-      .object({
-        execute: z
-          .function()
-          .describe('Executes a SQL query')
-          .args(z.any().describe('A SQL query string'))
-          .returns(
-            z
-              .any()
-              .array()
-              .promise()
-              .describe('An array containing the result set'),
-          ),
-      })
-      .describe('The Drizzle database object'),
-    sql: z
-      .function()
-      .describe('Formats and sanitizes a SQL query string')
-      .args(z.any().describe('Template string array'))
-      .returns(z.any().describe('A SQL query string')),
+    db: z.object({
+      get: z
+        .function()
+        .describe('Fetches a value from the database')
+        .args(z.string())
+        .returns(data.promise()),
+      set: z
+        .function()
+        .describe('Sets a value in the database')
+        .args(z.string(), data)
+        .returns(z.void().promise()),
+    }).describe('The Redis database object'),
   },
 });
 ```
 
-You can now import `drizzleLib` into any of your compilers using the `import` method. Here we will use it to make a `sql` compiler, which will write and test escaped queries against your database.
+You can now import the `redis` library into your autofunctions using the `import` method. 
 
 ```ts
-const sql = compiler()
-  .import(drizzleLib)
-  .compile(...) // logic that writes and tests queries
-  .build();
+const getData = autofunction
+  .compiler("gpt-4o")
+  .import(redis)
+  .take(z.string())
+  .note("Fetch a value from Redis")
+  .return(data)
+  .implement()
 ```
 
-The library will now be in-scope for any code generated by the `sql` compiler, and its documentation will be made available at compile-time. 
+The Redis database will now be in-scope at runtime, and its documentation will be made available at compile-time. 
 
-Compilers can `import` any number of libraries. The only restriction is that they must have different names. 
+Autofunctions can `import` any number of libraries---the only restriction is that they must have different names. 
 
 > If any library items are too complicated to document using Zod, you can declare them as an `any` type using `z.any()`. Note, though, that the only information a model will have about `any` types will be whatever you have attached to them using `describe`.
 
-To make use of the `sql` compiler, you could use the `drizzle-zod` plugin to tie Zod schemas to the shape of your database and then use those in the specs you write.
+## Tasks
 
-### `compile`
+You can share logic across autofunctions using *tasks*, which contain the following properties: 
 
-You can customize each compiler's AI code generation and testing logic, though this will remain undocumented until the testing API is more stable. Consult the [source code](./packages/core/src/compiler/default-compiler.ts) for more information.
+- `do`: some instructions
+- `output`: the output type of the task
+- `import` (optional): any necessary resources, e.g. database APIs
+- `error` (optional): the type of error the task can throw
+- `compiler` (optional): a special compiler to use
+
+Tasks serve the same purpose as types—they guide the generated logic and enforce rigid output constraints that will be checked at test-time. The difference is that they contain additional context to be passed into the compiler. 
+
+You can chain tasks (or types) together using the `then` method. Each call to `then` and `return` will be compiled in separate calls to the language model, allowing you to break up difficult work into small, composable chunks. 
+
+Suppose you've described your whole frontend design system in a library object called `components`, and that you would now like to automate a first pass for each of your higher-order components. You could encapsulate this logic in a task:
+
+```js
+import { z } from 'zod';
+import { components } from '@/my-design-system';
+import { data, db } from '@/my-database';
+
+// make some task you can reuse across autofunctions
+const ui = {
+  do: "make a React component",
+  output: z.custom<JSX.Element>(),
+  import: { components }
+}
+
+const fetchData = {
+  do: "fetch data from the database",
+  output: data,
+  import: { db }
+}
+
+const Dashboard = autofunction
+  .compiler("gpt-4o")
+  .take(data.pick({ id: true }))
+  .then(fetchData)
+  .comment("now we want a nice data dashboard")
+  .return(ui)
+  .implement()
+
+// usage in e.g. a Next.js page
+export default async function Page() {
+  return (
+    <main>
+      <Dashboard id={"some-id"} />
+    </main>
+  )
+}
+```
+
+It's worth noting that reusing tasks across your application is similar to how you might normally reuse functions. However, tasks are implemented *contextually* by the compiler, which means that two autofunctions that run the same task may do so slightly differently, leading presumably to some amount of code duplication.
 
 ### Handling errors
 
@@ -264,12 +301,85 @@ However do note in the meantime that if any error is encountered during the comp
 
 You will have to change this spec slightly to trigger a recompilation. This avoids expensive infinite loops.
 
-## VS Code extension
+## SQL stuff
 
-The [Autofunction VS Code extension](https://marketplace.visualstudio.com/items?itemName=Autofunction.autofunction) displays the compilation status of each autofunction directly in your code editor, right above each call to a compiler.
+Some SQL queries don't require any intelligence. To delete a row from a table, for example, you just need to know the table and the row's primary key.
 
-If the compiler has not been called yet since the last time you saved your workspace, then the status it displays will be "Not called yet." This is because it is unclear whether the autofunction needs to recompile until it is executed alongside the changes you've made. Once it is called in your application, this status will be replaced with a more informative one. 
+Below, however, we will focus on the two kinds of queries that require some thought:
 
-If compilation was successful, then you can use "Paste code" to paste the AI-generated implementation into your file as a manual override. 
+1. Inserting into one or more tables that have foreign key constraints
+2. Selects with multiple joins or additional computations
 
-If compilation has failed, you can use "Copy error to clipboard" to copy an exhaustive set of execution traces from the compilation process to paste into a Markdown file to view, or into some chat assistant's context window to debug. 
+First we will extend Zod with the notion of a `ZodTable`, which will hold the schema of a SQL table along with its relations to other tables. 
+
+```ts
+// implement
+```
+
+We can then use these types as the basic building blocks of our server-side logic by composing them using custom operators:
+
+```ts
+// define `one`
+// define `many`
+
+const tweet = one(post, {
+  mentions: many(mention),
+  hashtags: many(hashtag),
+  author: one(publicUser),
+  views: z.number().describe("View count")
+})
+```
+
+This `tweet` type encapsulates all of the information a language model will need to know to manipulate it on the application server or query it from the database. 
+
+We can then write e.g. an `insert` task that takes any record of table fragments--objects containing only the mandatory columns of a table--and inserts them into the database in the correct order, and a `find` task that takes a type and determines how to select it from the database. 
+
+Note `then` and `return` optionally take a *task generator* as an argument, which is a function that takes the previous type in the chain and returns a new task.
+
+```ts
+function fragment<T extends ZodTableAny>(table: T): Fragment<T> {
+  // filter out non-mandatory columns
+}
+
+function insert<
+  TTables extends Record<string, ZodTableAny>
+>(tables: TTables): Task {
+  return {
+    do: `insert into the tables in the right order...`,
+    output: table,
+    import: { 
+      drizzle: (lib) => ({
+        db: lib.db.pick({ insert: true })
+      })
+    },
+    error: z.literal("Already exists"),
+    examples: [...],
+  }
+}
+
+function find(type: ZodTypeAny): Task {
+  return {
+    do: `select from the table...`,
+    output: type,
+    import: { 
+      drizzle: (lib) => ({
+        db: lib.db.pick({ execute: true }),
+        sql: lib.sql
+      })
+    },
+    error: z.literal("Not found"),
+    examples: [...]
+  }
+}
+
+// usage 
+const postTweet = auto 
+  .take({
+    post: fragment(post),
+    mentions: many(fragment(mention)),
+    hashtags: many(fragment(hashtag)),
+  })
+  .then(insertMany)
+  .return(find(tweet)) 
+  .implement()
+```
