@@ -1,8 +1,8 @@
 # autofunction
 
-Autofunction is an experimental framework for metaprogramming with language models. It provides a high-level API for defining functions that in some sense write themselves—autofunctions. 
+Autofunction is an experimental framework for metaprogramming with language models. It provides a high-level API for defining functions that write themselves—autofunctions. 
 
-The library emphasizes the use of *code* to prompt programming agents, allowing you to write precise, reusable commands whose implementations can be validated by the application at runtime.
+The library emphasizes the use of *types* to prompt programming agents, allowing you to create precise, reusable requests for functions whose behavior your application can validate at runtime.
 
 Agents are run on the main thread, which means they can use live data to autonomously test and debug the code they write. This pattern, while presenting serious security challenges, makes effective use of a language model's iteration speed to quickly converge to functions that work.
 
@@ -35,9 +35,7 @@ This is generally considered bad practice—the [official JavaScript documentati
 
 ## Usage
 
-An autofunction is implemented by a passing a _spec_ into a _compiler_.
-
-This spec describes some desired function using a sequence of natural language notes and [Zod schemas](https://github.com/colinhacks/zod), allowing the application to enforce rigid type constraints on the function's behavior. 
+An autofunction is declared by writing a _spec_, which describes the function you want using a mixture of natural language and [Zod schemas](https://github.com/colinhacks/zod), allowing the application to enforce rigid type constraints on the function's behavior. 
 
 A compiler takes this spec and generates an asynchronous function that implements it—an autofunction.
 
@@ -51,39 +49,72 @@ const autofunction = createAutofunction({
 })
 ```
 
-To then declare an autofunction, first define its compiler using [a language model supported by Vercel's AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/overview). The following uses GPT-4o to implement a trivial autofunction that sums an array of numbers:
+To then declare an autofunction, first provide a compiler in the form of a [language model via Vercel's AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/overview). The following uses GPT-4o to implement a trivial autofunction that sums an array of numbers:
 
 ```ts
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 
 const sum = autofunction
-  .compiler(openai("gpt-4o")) // 1. the language model to use
-  .take(z.number().array())   // 2. the type the function *takes*
-  .note("Sum the numbers")    // 3. an inline note for the model
-  .return(z.number())         // 4. the type the function *returns*
-  .implement()                // 5. finally convert to a function
+  .compiler(openai("gpt-4o")) 
+  .take(z.number().array())   
+  .then({
+    do: "sum the numbers",    
+    output: z.number()       
+  })         
+  .implement()                
 
 await sum([1, 2, 3, 4]); // returns 10, hopefully
 ```
 
-Here the calls to `take`, `note`, and `return` are chained together to form the notion of a "spec," describing precisely some expected flow of data through the function.
+The `take` method accepts a Zod schema that will be used to type and validate inputs to the function. `then` is used to [specify one or more logical tasks for the compiler to implement](#tasks). Each task has a `do` description and an `output` type that will be validated.
 
-You can think of a spec as a three-sided contract between you, the application, and the language model, ensuring that all parties are in agreement about the function's intended behavior.
+A spec, then, consists of a sequence of calls to `take` and `then`, describing precisely some expected flow of data through the function.
+
+The return type of the function will be inferred from the `output` of the final `then` statement—alternatively you can add a call to `return` to the chain to specify it explicitly, perhaps leaving it blank:
+
+```ts
+const sum = autofunction
+  .compiler(openai("gpt-4o"))
+  .take(z.number().array())
+  .then({
+    do: "sum the numbers",
+    output: z.number()
+  })
+  .return(z.number()) // explicitly specify the return type
+  .implement()
+```
+
+If you only plan to use one language model, you can call `compiler` once and reuse the resulting object across declarations:
+
+```ts
+const gpt4o = autofunction.compiler(openai("gpt-4o"))
+
+const sum = gpt4o
+  .take(z.number().array())
+  .then({
+    do: "sum the numbers",
+    output: z.number()
+  })
+  .implement()
+
+const multiply = gpt4o
+  .take(z.number().array())
+  .then({
+    do: "multiply the numbers",
+    output: z.number()
+  })
+  .implement()
+```
+
+You can think of a spec as a three-sided contract between you, the application, and the language model, ensuring that all parties are in agreement about the function's intended behavior. 
 
 In the case of `sum`, the application knows to expect a number as an output, otherwise emitting an error that the compiler can learn from. TypeScript will also infer the correct input and output types at compile-time.
 
 The language model for its part sees the spec in the following format:
 
 ```txt
-Please implement this function:
-```js
-async function f(input) {
-  // Sum the numbers
-
-}
-``
-Here is the function's expected interface phrased as an extended JSON schema:
+Please implement a JavaScript function for me. I've written up what I want it to do as a JSON schema:
 ```json
 {
   "input": {
@@ -95,24 +126,31 @@ Here is the function's expected interface phrased as an extended JSON schema:
   "output": {
     "type": "number",
     "promise": true
-  }
+  },
+  "description": "sum the numbers"
 }
 ``
-Write the full function in JavaScript inside of triple backticks.
+I've already written the following code: 
+```js
+async function f(input) {
+  // Any previously generated code goes here
+}
+``
 ```
 
 When `sum` is called, it checks its code repository for an implementation of its current spec. If no existing code is found, then it will compile itself, using the specified language model to generate and test new code. In either case if all goes well it will execute the code and return the result. 
 
-One novel feature of this setup is that compilers can autonomously iterate on the code they write, learning from tests, execution traces, and actual application data in lieu of direct oversight.
+This setup allows compilers to autonomously iterate on the code they write, learning from tests, execution traces, and actual application data in lieu of direct oversight.
 
 You will notice, then, that the first call to an autofunction whose spec has just been changed, however slightly, will take some time, while any subsequent calls will be fast.
 
 ```ts
-const sum = autofunction
-  .compiler("gpt-4o")
-  .take(z.number().array().array()) // now takes *nested* arrays
-  .comment("Sum the numbers")
-  .return(z.number())
+const sum = gpt4o
+  .take(z.number().array())
+  .then({
+    do: "sum the numbers",
+    output: z.number()
+  })
   .implement()
 
 await sum([[1, 2], [3, 4]]); // execution: 2647ms (had to compile)
@@ -120,47 +158,25 @@ await sum([[1, 2, 3], [4]]); // execution: 2ms
 await sum([[1], [2, 3, 4]]); // execution: 2ms
 ```
 
-Specs, then, are like standing orders—when you change the shape of your data, any dependent functions will recompile. In this way an autofunction defines a family of functions parametrized by the types and notes in its spec, which can be changed without necessarily breaking the application.
+Specs are like standing orders—when you alter the types they are composed of, any dependent functions will recompile instead of simply breaking. 
 
-You can stabilize the compilation process by specifying intermediate checkpoints of the function's data using the `then` method. It takes a type and instructs the model to generate an in-context utility function that returns that type. `then` statements are compiled in sequence. 
+Types, then, allow you to broadcast your ideas to any number of language models in a format that inherently constrains their behavior.
 
-For instance, you could take the previous `sum` logic and extend it to detect whether the sum is even or odd:
-
-```ts
-const sumIsEven = autofunction
-  .compiler("gpt-4o")
-  .take(z.number().array())
-  .note("Sum the numbers")
-  .then(z.number())
-  .note("Return true if the sum is even, false otherwise")
-  .return(z.boolean())
-  .implement()
-
-await sumIsEven([1, 2, 3, 4]); // returns true, hopefully
-```
-
-Then what this looks like:
-
-```txt
-// 
-```
-
-This allows you to cut the space of possible intermediate computations the model can output.  
-
-Autofunction declarations end with a call to `implement`, which optionally takes a hardcoded implementation of the function:
+You can manually override model-generated implementations by passing a function to `implement`:
 
 ```ts
-const sum = autofunction
-  .compiler("gpt-4o")
+const sum = gpt4o
   .take(z.number().array())
-  .comment("Sum the numbers")
-  .return(z.number())
+  .then({
+    do: "sum the numbers",
+    output: z.number()
+  })
   .implement(async (numbers) => {
     return numbers.reduce((a, b) => a + b, 0)
   })
 ```
 
-Functions passed to `implement` in this way bypass the compilation process entirely, serving as a sort of manual override if the compiler keeps failing.
+Functions hardcoded like this bypass the compilation process entirely, and are implicitly typed by Zod.
 
 ## VS Code extension
 
@@ -224,24 +240,25 @@ const redis = library({
 You can now import the `redis` library into your autofunctions using the `import` method. 
 
 ```ts
-const getData = autofunction
-  .compiler("gpt-4o")
+const getData = gpt4o
   .import(redis)
   .take(z.string())
-  .note("Fetch a value from Redis")
-  .return(data)
+  .then({
+    do: "Fetch a value from Redis",
+    output: data
+  })
   .implement()
 ```
 
 The Redis database will now be in-scope at runtime, and its documentation will be made available at compile-time. 
 
-Autofunctions can `import` any number of libraries---the only restriction is that they must have different names. 
+Autofunctions can `import` any number of libraries—-the only restriction is that they must have different names. 
 
 > If any library items are too complicated to document using Zod, you can declare them as an `any` type using `z.any()`. Note, though, that the only information a model will have about `any` types will be whatever you have attached to them using `describe`.
 
 ## Tasks
 
-You can share logic across autofunctions using *tasks*, which contain the following properties: 
+The object passed into each `then` statement is a *task*, which encapsulates all of the context the compiler needs in order to write a particular form of logic. It contains the following properties:
 
 - `do`: some instructions
 - `output`: the output type of the task
@@ -249,22 +266,21 @@ You can share logic across autofunctions using *tasks*, which contain the follow
 - `error` (optional): the type of error the task can throw
 - `compiler` (optional): a special compiler to use
 
-Tasks serve the same purpose as types—they guide the generated logic and enforce rigid output constraints that will be checked at test-time. The difference is that they contain additional context to be passed into the compiler. 
+Each call to `then` will be compiled in separate sessions with the language model. All previously generated code will be made available to the model during each task, but it will only see the context of the task at hand.
 
-You can chain tasks (or types) together using the `then` method. Each call to `then` and `return` will be compiled in separate calls to the language model, allowing you to break up difficult work into small, composable chunks. 
-
-Suppose you've described your whole frontend design system in a library object called `components`, and that you would now like to automate a first pass for each of your higher-order components. You could encapsulate this logic in a task:
+Suppose you've described your whole frontend design system in a library object called `components`, and that you would now like to automate a first pass for each of your higher-order components. You could encapsulate this logic in a task, and you could do something similar with your database API:
 
 ```js
 import { z } from 'zod';
 import { components } from '@/my-design-system';
 import { data, db } from '@/my-database';
 
-// make some task you can reuse across autofunctions
-const ui = {
-  do: "make a React component",
-  output: z.custom<JSX.Element>(),
-  import: { components }
+function ui(desc: string): Task {
+  return {
+    do: `make this React component: ${desc}`,
+    output: z.custom<JSX.Element>(),
+    import: { components }
+  }
 }
 
 const fetchData = {
@@ -273,12 +289,10 @@ const fetchData = {
   import: { db }
 }
 
-const Dashboard = autofunction
-  .compiler("gpt-4o")
+const Dashboard = gpt4o
   .take(data.pick({ id: true }))
   .then(fetchData)
-  .comment("now we want a nice data dashboard")
-  .return(ui)
+  .then(ui("a nice data dashboard"))
   .implement()
 
 // usage in e.g. a Next.js page
@@ -291,7 +305,26 @@ export default async function Page() {
 }
 ```
 
-It's worth noting that reusing tasks across your application is similar to how you might normally reuse functions. However, tasks are implemented *contextually* by the compiler, which means that two autofunctions that run the same task may do so slightly differently, leading presumably to some amount of code duplication.
+It's worth noting that reusing tasks across your application is similar to how you might normally reuse functions. However, tasks are implemented *contextually* by the compiler, which means that two autofunctions that run the same task will likely do so slightly differently.
+
+Because the simple fetcher above doesn't rely on context, we could have equivalently passed `fetchData` in as a function for the compiler to call:
+
+```ts
+const Dashboard = gpt4o
+  .take(
+    z
+      .function()
+      .describe("fetches data from the database")
+      .args(z.string())
+      .returns(data.promise())
+  )
+  .then({
+    do: "fetch data",
+    output: data
+  })
+  .then(ui("a nice data dashboard"))
+  .implement()
+```
 
 ### Handling errors
 
@@ -303,12 +336,12 @@ You will have to change this spec slightly to trigger a recompilation. This avoi
 
 ## SQL stuff
 
-Some SQL queries don't require any intelligence. To delete a row from a table, for example, you just need to know the table and the row's primary key.
+Some SQL queries don't require any intelligence. To delete a row from a table, for instance, you just need to know the table and the row's primary key.
 
 Below, however, we will focus on the two kinds of queries that require some thought:
 
 1. Inserting into one or more tables that have foreign key constraints
-2. Selects with multiple joins or additional computations
+2. Selects with multiple joins or derived fields
 
 First we will extend Zod with the notion of a `ZodTable`, which will hold the schema of a SQL table along with its relations to other tables. 
 
@@ -332,9 +365,9 @@ const tweet = one(post, {
 
 This `tweet` type encapsulates all of the information a language model will need to know to manipulate it on the application server or query it from the database. 
 
-We can then write e.g. an `insert` task that takes any record of table fragments--objects containing only the mandatory columns of a table--and inserts them into the database in the correct order, and a `find` task that takes a type and determines how to select it from the database. 
+We can then write e.g. an `insert` task that takes any number of table fragments—objects containing only the mandatory columns of a table—and inserts them into the database in the correct sequence, and a `find` task that takes a type and determines how to select it from the database. 
 
-Note `then` and `return` optionally take a *task generator* as an argument, which is a function that takes the previous type in the chain and returns a new task.
+Note `then` optionally take a *task constructor* as an argument, which is a function that takes the previous type in the chain and returns a new task.
 
 ```ts
 function fragment<T extends ZodTableAny>(table: T): Fragment<T> {
@@ -373,7 +406,7 @@ function find(type: ZodTypeAny): Task {
 }
 
 // usage 
-const postTweet = auto 
+const postTweet = gpt4o 
   .take({
     post: fragment(post),
     mentions: many(fragment(mention)),
